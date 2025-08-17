@@ -8,8 +8,10 @@ const Header = ({ className = '' }) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [processingStatus, setProcessingStatus] = useState(null);
   
-  const dropdownRef = useRef(null);
+  const dropdownContainerRef = useRef(null);
   const dropdownButtonRef = useRef(null);
+  const mobileMenuButtonRef = useRef(null);
+  const firstMobileLinkRef = useRef(null);
 
   const navigationItems = [
     {
@@ -52,36 +54,67 @@ const Header = ({ className = '' }) => {
       tooltip: 'تحرير مقاطع الفيديو'
     }
   ];
-
-  // Effect for handling clicks outside the dropdown
+  
+  // Close dropdown on click outside
   useEffect(() => {
     function handleClickOutside(event) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+      if (dropdownContainerRef.current && !dropdownContainerRef.current.contains(event.target)) {
         setIsDropdownOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [dropdownRef]);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [dropdownContainerRef]);
 
-  // Effect for handling Escape key to close dropdown
+  // Handle keyboard navigation for dropdown
   useEffect(() => {
+    if (!isDropdownOpen) return;
+    const menuItems = dropdownContainerRef.current.querySelectorAll('[role="menuitem"]');
+    if (menuItems.length === 0) return;
+    
+    menuItems[0].focus();
+
     function handleKeyDown(event) {
-        if (event.key === 'Escape') {
-            setIsDropdownOpen(false);
-            dropdownButtonRef.current?.focus();
+      const { key } = event;
+      if (key === 'Escape' || key === 'Tab') {
+        setIsDropdownOpen(false);
+        dropdownButtonRef.current?.focus();
+        return;
+      }
+      if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(key)) {
+        event.preventDefault();
+        const activeIndex = Array.from(menuItems).indexOf(document.activeElement);
+        let nextIndex;
+        if (key === 'ArrowDown') {
+          nextIndex = (activeIndex + 1) % menuItems.length;
+        } else if (key === 'ArrowUp') {
+          nextIndex = (activeIndex - 1 + menuItems.length) % menuItems.length;
+        } else if (key === 'Home') {
+            nextIndex = 0;
+        } else if (key === 'End') {
+            nextIndex = menuItems.length - 1;
         }
+        menuItems[nextIndex]?.focus();
+      }
     }
-    if (isDropdownOpen) {
-        document.addEventListener('keydown', handleKeyDown);
-    }
-    return () => {
-        document.removeEventListener('keydown', handleKeyDown);
-    };
+    dropdownContainerRef.current.addEventListener('keydown', handleKeyDown);
+    return () => dropdownContainerRef.current?.removeEventListener('keydown', handleKeyDown);
   }, [isDropdownOpen]);
 
+  // Handle keyboard navigation for mobile menu
+  useEffect(() => {
+    if (!isMobileMenuOpen) return;
+    firstMobileLinkRef.current?.focus();
+
+    function handleKeyDown(event) {
+        if (event.key === 'Escape') {
+            setIsMobileMenuOpen(false);
+            mobileMenuButtonRef.current?.focus();
+        }
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isMobileMenuOpen]);
 
   useEffect(() => {
     // Simulate processing status updates
@@ -110,7 +143,7 @@ const Header = ({ className = '' }) => {
         color: 'text-accent',
         bgColor: 'bg-accent/10',
         icon: 'Loader2',
-        text: 'جاري المعالجة...','
+        text: 'جاري المعالجة...',
         animate: 'animate-spin'
       },
       error: {
@@ -151,123 +184,113 @@ const Header = ({ className = '' }) => {
     </Link>
   );
 
-  const renderNavigationItem = ({ label, path, icon, tooltip }, isMobile = false) => {
+  const renderNavigationItem = ({ label, path, icon, tooltip }, isMobile = false, ref = null) => {
     const navLinkClasses = ({ isActive }) =>
-      `flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+      `flex items-center gap-2 px-4 py-2 rounded-lg transition-colors text-sm font-medium ${
         isActive ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"
       }`;
 
     const mobileNavLinkClasses = ({ isActive }) =>
-      `flex items-center gap-3 px-4 py-3 rounded-lg transition-colors w-full text-left ${
+      `flex items-center gap-3 px-4 py-3 rounded-lg transition-colors w-full text-left text-base font-medium ${
         isActive ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"
       }`;
 
     return (
       <NavLink
+        ref={ref}
         key={path}
         to={path}
         onClick={isMobile ? closeMobileMenu : undefined}
         className={isMobile ? mobileNavLinkClasses : navLinkClasses}
         title={tooltip}
+        role={isMobile ? undefined : "menuitem"}
       >
         <Icon name={icon} size={isMobile ? 20 : 18} />
-        <span className={`font-medium ${isMobile ? 'text-base' : 'text-sm'}`}> 
-          {label}
-        </span>
+        <span>{label}</span>
       </NavLink>
     );
   };
 
   return (
-    <>
+    <> 
       <header className={`fixed top-0 left-0 right-0 z-50 bg-card border-b border-border ${className}`}> 
         <div className="flex items-center justify-between h-16 px-4 lg:px-6"> 
-          {/* Logo */}
-          {renderLogo()}
+          {renderLogo()} 
 
-          {/* Desktop Navigation */}
           <nav className="hidden lg:flex items-center gap-1"> 
-            {navigationItems?.map(item => renderNavigationItem(item))}
-          </nav>
+            {navigationItems?.map(item => renderNavigationItem(item))} 
+          </nav> 
 
-          {/* Right Section */}
           <div className="flex items-center gap-3"> 
-            {/* Processing Status Indicator */}
-            {renderProcessingIndicator()}
+            {renderProcessingIndicator()} 
 
-            {/* More Menu - Desktop */}
-            <div className="hidden lg:block relative" ref={dropdownRef}> 
-              <Button
-                ref={dropdownButtonRef}
-                variant="ghost"
-                size="sm"
-                iconName="MoreHorizontal"
-                className="text-muted-foreground hover:text-foreground"
-                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                aria-haspopup="true"
-                aria-expanded={isDropdownOpen}
-              >
-                المزيد
-              </Button>
+            <div className="hidden lg:block relative" ref={dropdownContainerRef}> 
+              <Button 
+                ref={dropdownButtonRef} 
+                variant="ghost" 
+                size="sm" 
+                iconName="MoreHorizontal" 
+                className="text-muted-foreground hover:text-foreground" 
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)} 
+                aria-haspopup="true" 
+                aria-expanded={isDropdownOpen} 
+                aria-controls="desktop-more-menu" 
+              > 
+                المزيد 
+              </Button> 
               
-              {/* Dropdown Menu */}
-              {isDropdownOpen && (
-                <div 
-                  className="absolute right-0 top-full mt-2 w-56 bg-popover border border-border rounded-lg shadow-floating z-40"
-                  role="menu"
-                >
-                  <div className="p-2"> 
-                    {secondaryItems?.map(item => renderNavigationItem(item))}
-                  </div>
-                </div>
-              )}
-            </div>
+              {isDropdownOpen && ( 
+                <div  
+                  id="desktop-more-menu" 
+                  className="absolute right-0 top-full mt-2 w-56 bg-popover border border-border rounded-lg shadow-floating z-40 p-2" 
+                  role="menu" 
+                  aria-orientation="vertical" 
+                > 
+                  {secondaryItems?.map(item => renderNavigationItem(item))} 
+                </div> 
+              )} 
+            </div> 
 
-            {/* Mobile Menu Button */}
-            <Button
-              variant="ghost"
-              size="sm"
-              iconName={isMobileMenuOpen ? "X" : "Menu"}
-              onClick={handleMobileMenuToggle}
-              className="lg:hidden text-muted-foreground hover:text-foreground"
-              aria-controls="mobile-menu"
-              aria-expanded={isMobileMenuOpen}
-            />
-          </div>
-        </div>
-      </header>
-      {/* Mobile Menu Overlay */}
-      {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-40 lg:hidden" aria-modal="true"> 
-          {/* Backdrop */}
-          <div 
-            className="absolute inset-0 bg-background/80 backdrop-blur-sm"
-            onClick={closeMobileMenu}
-          />
+            <Button 
+              ref={mobileMenuButtonRef} 
+              variant="ghost" 
+              size="sm" 
+              iconName={isMobileMenuOpen ? "X" : "Menu"} 
+              onClick={handleMobileMenuToggle} 
+              className="lg:hidden text-muted-foreground hover:text-foreground" 
+              aria-controls="mobile-menu" 
+              aria-expanded={isMobileMenuOpen} 
+            /> 
+          </div> 
+        </div> 
+      </header> 
+      
+      {isMobileMenuOpen && ( 
+        <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true"> 
+          <div  
+            className="absolute inset-0 bg-background/80 backdrop-blur-sm" 
+            onClick={closeMobileMenu} 
+          /> 
           
-          {/* Menu Panel */}
           <div id="mobile-menu" className="absolute top-16 left-0 right-0 bg-card border-b border-border shadow-floating animate-slide-in-right"> 
             <nav className="p-4 space-y-2"> 
-              {/* Primary Navigation */}
               <div className="space-y-1"> 
-                {navigationItems?.map(item => renderNavigationItem(item, true))}
-              </div>
+                {navigationItems?.map((item, index) => renderNavigationItem(item, true, index === 0 ? firstMobileLinkRef : null))} 
+              </div> 
               
-              {/* Divider */}
               <div className="border-t border-border my-4" /> 
               
-              {/* Secondary Navigation */}
               <div className="space-y-1"> 
-                {secondaryItems?.map(item => renderNavigationItem(item, true))}
-              </div>
-            </nav>
-          </div>
-        </div>
-      )}
-      {/* Spacer for fixed header */}
-      <div className="h-16" />
-    </>
-  );
+                {secondaryItems?.map(item => renderNavigationItem(item, true))} 
+              </div> 
+            </nav> 
+          </div> 
+        </div> 
+      )} 
+      
+      <div className="h-16" /> 
+    </> 
+  ); 
 };
 
 export default Header;
